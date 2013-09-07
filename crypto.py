@@ -1,7 +1,44 @@
 import math
 import itertools
 import re
+import inspect
 from fractions import Fraction
+
+class Crypto:
+    def __init__(self, numParams = 5):
+        self.unary = [fsqrt]
+        self.binary = [fadd, fsub, fdiv, fmult]
+        self.language = self.genLanguage()
+        self.nonterminals = '|'.join(self.language.keys())
+        self.unary_limit = numParams
+
+    def addFunction(self):
+        pass
+        # inspect.getargspec(<function>).args
+
+    def genLanguage(self):
+        return  {
+            'START': ['UNARY', 'BINARY', 'NUM'],
+            'UNARY': ['UFUNC(PARAMETER)'],
+            'BINARY': ['BFUNC(PARAMETER,PARAMETER)'],
+            'PARAMETER': ['UNARY', 'BINARY', 'NUM'],
+            'UFUNC': listFunctionNames(self.unary),
+            'BFUNC': listFunctionNames(self.binary)
+            # define num to concat here
+        }
+
+    def generateTemplates(self, numParams):
+        generated = []
+        generateTemplatesR('START', numParams, numParams, generated)
+        generated = [s for s in generated if s.count('NUM') <= numParams]
+        self.templates = generated
+        return self.templates
+
+    
+
+
+
+
 
 
 #does this change the solutions? FM: Test
@@ -33,6 +70,7 @@ def fdiv(a, b):
 def fmult(a, b):
     return a * b
 
+
 ###################################################
 
 def listFunctionNames(listOfFunctions):
@@ -42,9 +80,10 @@ def iterableToStrIterable(iterable):
     return [str(i) for i in iterable]
 
 #can I generate these programmatically?
-UNARY = [fsqrt]#, ffact]#fneg, fsqrt]#fnull
+UNARY = []#fsqrt]#, ffact]#fneg, fsqrt]#fnull
 
-BINARY = [fadd, fsub, fdiv, fmult]#, fexp]
+BINARY = [fadd, fsub, fdiv, fmult]#, fexp] # add a concat function instead
+#of looping through all partitions?
 
 def genLanguage(fUnary = UNARY, fBinary = BINARY):
     return  {
@@ -54,6 +93,7 @@ def genLanguage(fUnary = UNARY, fBinary = BINARY):
     'PARAMETER': ['UNARY', 'BINARY', 'NUM'],
     'UFUNC': listFunctionNames(fUnary),
     'BFUNC': listFunctionNames(fBinary)
+    # define num to concat here
 }
 
 dictKeysRegex = r'START|UNARY|BINARY|PARAMETER|UFUNC|BFUNC'
@@ -85,7 +125,6 @@ def fillExpressions(templates, groups):
                 limited = result.limit_denominator()
                 if limited.denominator == 1:
                     maybeIntSolutions[limited.numerator] = realExpression
-                
     return intSolutions, maybeIntSolutions
 
 def replaceWithRealNumbers(template, grouping):
