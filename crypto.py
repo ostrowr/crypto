@@ -5,12 +5,11 @@ import inspect
 from fractions import Fraction
 
 class Crypto:
-    def __init__(self, numParams = 5):
+    def __init__(self):
         self.unary = [fsqrt]
         self.binary = [fadd, fsub, fdiv, fmult]
         self.language = self.genLanguage()
         self.nonterminals = '|'.join(self.language.keys())
-        self.unary_limit = numParams
 
     def addFunction(self):
         pass
@@ -18,26 +17,104 @@ class Crypto:
 
     def genLanguage(self):
         return  {
-            'START': ['UNARY', 'BINARY', 'NUM'],
-            'UNARY': ['UFUNC(PARAMETER)'],
-            'BINARY': ['BFUNC(PARAMETER,PARAMETER)'],
-            'PARAMETER': ['UNARY', 'BINARY', 'NUM'],
-            'UFUNC': listFunctionNames(self.unary),
-            'BFUNC': listFunctionNames(self.binary)
-            # define num to concat here
-        }
+        'START': ['UNARY', 'BINARY', 'NUM'],
+        'UNARY': ['UFUNC(PARAMETER)'],
+        'BINARY': ['BFUNC(PARAMETER,PARAMETER)'],
+        'PARAMETER': ['UNARY', 'BINARY', 'NUM'],
+        'UFUNC': listFunctionNames(self.unary),
+        'BFUNC': listFunctionNames(self.binary),
+        'NUM': ['TERM', 'TERMNUM'],
+        #'TERMNUM': ['TERMNUM']
+        # define num to concat here
+    }
 
     def generateTemplates(self, numParams):
         generated = []
-        generateTemplatesR('START', numParams, numParams, generated)
-        generated = [s for s in generated if s.count('NUM') <= numParams]
+        self.__generateTemplatesR('START', numParams, numParams, generated)
+        generated = [s for s in generated if s.count('TERM') == numParams]
         self.templates = generated
         return self.templates
 
-    
+
+    def __generateTemplatesR(self, builtString, uLimit, numParameters, generated):
+        match = re.search(dictKeysRegex, builtString)
+        if not match:
+            return builtString
+        language = self.genLanguage()
+        if numParameters <= 0:
+            language['PARAMETER'] = ['TERM']
+            language['NUM'] = ['TERM']
+        if uLimit <= 0:
+            language['UNARY'] = []
+        for replacement in language[match.group()]:
+            result = None
+            if match.group() == 'UNARY':
+                result = self.__generateTemplatesR(resub(match, replacement, builtString), uLimit - 1, numParameters, generated)
+            elif match.group() == 'PARAMETER':
+                result = self.__generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
+            elif match.group() == 'NUM' and builtString[match.start() - 4:match.start()] == 'TERM':
+                result = self.__generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
+            else: 
+                result = self.__generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters, generated)
+            if result:
+                generated.append(result)
+        return
 
 
+    def generateEquations(self, numList, templates=None):
+        equations = []
+        if templates is None:
+            return self.generateEquations(numList, self.generateTemplates(len(numList)))
+        for template in templates:
+            for permutation in itertools.permutations(iterableToStrIterable(numList)):
+                equation = template
+                for num in permutation:
+                    equation = equation.replace('TERM', num, 1)
+                equations.append(equation)
+        self.equations = equations
+        return self.equations
 
+
+    def solveCrypto(self, numList, equations=None, templates=None):
+        if equations is None:
+            return self.solveCrypto(numList, self.generateEquations(numList, templates), templates)
+        solutions = {}
+        imprecise = {}
+        invalid = {}
+        for equation in equations:
+            impreciseFlag = False
+            try:
+                result = eval(equation)
+                if result.denominator != 1:
+                    result = result.limit_denominator()
+                    impreciseFlag = True
+            except ZeroDivisionError:
+                result = "Zero Division Error"
+            except OverflowError:
+                result = "Overflow Error"
+            except ValueError:
+                result = "Math Domain Error"
+            if impreciseFlag: #decompose
+                if solutions.get(result) is None:
+                    imprecise[result] = [equation]
+                else:
+                    imprecise[result].append(equation)
+            else:
+                if solutions.get(result) is None:
+                    solutions[result] = [equation]
+                else:
+                    solutions[result].append(equation)
+        self.int_solutions = solutions
+        self.imprecise_solutions = imprecise
+        self.invalid_solutions = invalid
+        return self.solutions
+
+
+def appendIntoDict(dictionary, key, val):
+    if dictionary.get(val) == None:
+        dictionary[key] = [val]
+    else:
+        dictionary[key].append(val)
 
 
 
@@ -50,7 +127,7 @@ def fexp(a, b):
 
 def ffact(n):
     if n.denominator == 1:
-        return Fraction(math.factorial(n.numerator))
+        return math.factorial(n.numerator)
     return n
 
 ##################################################
@@ -65,7 +142,7 @@ def fsub(a, b):
     return a - b
 
 def fdiv(a, b):
-    return a / b
+    return Fraction(a) / Fraction(b)
 
 def fmult(a, b):
     return a * b
@@ -85,112 +162,116 @@ UNARY = []#fsqrt]#, ffact]#fneg, fsqrt]#fnull
 BINARY = [fadd, fsub, fdiv, fmult]#, fexp] # add a concat function instead
 #of looping through all partitions?
 
-def genLanguage(fUnary = UNARY, fBinary = BINARY):
-    return  {
-    'START': ['UNARY', 'BINARY', 'NUM'],
-    'UNARY': ['UFUNC(PARAMETER)'],
-    'BINARY': ['BFUNC(PARAMETER,PARAMETER)'],
-    'PARAMETER': ['UNARY', 'BINARY', 'NUM'],
-    'UFUNC': listFunctionNames(fUnary),
-    'BFUNC': listFunctionNames(fBinary)
-    # define num to concat here
-}
+# def genLanguage(fUnary = UNARY, fBinary = BINARY):
+#     return  {
+#     'START': ['UNARY', 'BINARY', 'NUM'],
+#     'UNARY': ['UFUNC(PARAMETER)'],
+#     'BINARY': ['BFUNC(PARAMETER,PARAMETER)'],
+#     'PARAMETER': ['UNARY', 'BINARY', 'NUM'],
+#     'UFUNC': listFunctionNames(fUnary),
+#     'BFUNC': listFunctionNames(fBinary),
+#     'NUM': ['TERM', 'TERMNUM'],
+#     #'TERMNUM': ['TERMNUM']
+#     # define num to concat here
+# }
 
-dictKeysRegex = r'START|UNARY|BINARY|PARAMETER|UFUNC|BFUNC'
+# dictKeysRegex = r'START|NUM|UNARY|BINARY|PARAMETER|UFUNC|BFUNC'
 
-def generateEquations(numList):
-    templates = generateTemplates(len(numList))
-    groupedByNum = groupList(numList)
-    return fillExpressions(templates, groupedByNum)
+# def generateEquations(numList):
+#     templates = generateTemplates(len(numList))
+#     groupedByNum = groupList(numList)
+#     return fillExpressions(templates, groupedByNum)
 
-def fillExpressions(templates, groups):
-    intSolutions = {}
-    maybeIntSolutions = {}
-    for template in templates:
-        count = template.count('NUM')
-        for group in groups[count]:
-            realExpression = replaceWithRealNumbers(template, group)
-            result = None
-            try:
-                result = eval(realExpression)
-            except ZeroDivisionError:
-                pass
-            except ValueError:
-                pass
-            except OverflowError:
-                pass
-            if result and result.denominator == 1:
-                intSolutions[result.numerator] = realExpression
-            elif result:
-                limited = result.limit_denominator()
-                if limited.denominator == 1:
-                    maybeIntSolutions[limited.numerator] = realExpression
-    return intSolutions, maybeIntSolutions
+# def fillExpressions(templates, groups):
+#     intSolutions = {}
+#     maybeIntSolutions = {}
+#     for template in templates:
+#         count = template.count('NUM')
+#         for group in groups[count]:
+#             realExpression = replaceWithRealNumbers(template, group)
+#             result = None
+#             try:
+#                 result = eval(realExpression)
+#             except ZeroDivisionError:
+#                 pass
+#             except ValueError:
+#                 pass
+#             except OverflowError:
+#                 pass
+#             if result and result.denominator == 1:
+#                 intSolutions[result.numerator] = realExpression
+#             elif result:
+#                 limited = result.limit_denominator()
+#                 if limited.denominator == 1:
+#                     maybeIntSolutions[limited.numerator] = realExpression
+#     return intSolutions, maybeIntSolutions
 
-def replaceWithRealNumbers(template, grouping):
-    for group in grouping:
-        template = template.replace('NUM', 'Fraction(' + group + ')', 1)
-    return template
+# def replaceWithRealNumbers(template, grouping):
+#     for group in grouping:
+#         template = template.replace('NUM', 'Fraction(' + group + ')', 1)
+#     return template
 
-def resub(match, replace, builtString):
-    return builtString[:match.start()] + replace + builtString[match.end():]
+# def resub(match, replace, builtString):
+#     return builtString[:match.start()] + replace + builtString[match.end():]
 
-def generateTemplates(numParams):
-    generated = []
-    generateTemplatesR('START', numParams, numParams, generated)
-    generated = [s for s in generated if s.count('NUM') <= numParams]
-    return generated
-
-def generateTemplatesR(builtString, uLimit, numParameters, generated):
-    match = re.search(dictKeysRegex, builtString)
-    if not match:
-        return builtString
-    language = genLanguage()
-    if numParameters <= 0:
-        language['PARAMETER'] = ['NUM']
-    if uLimit <= 0:
-        language['UNARY'] = []
-    for replacement in language[match.group()]:
-        result = None
-        if match.group() == 'UNARY':
-            result = generateTemplatesR(resub(match, replacement, builtString), uLimit - 1, numParameters, generated)
-        elif match.group() == 'PARAMETER':
-            result = generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
-        elif match.group() == 'NUM':
-            result = generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters, generated)
-        else: 
-            result = generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters, generated)
-        if result:
-            generated.append(result)
-    return
-
-# I took this function (slightly modified) from
-# http://stackoverflow.com/questions/10035752/elegant-python-code-for-integer-partitioning 
-def partitionInt(number):
-     answer = set()
-     answer.add((number, ))
-     for x in range(1, number):
-         for y in partitionInt(number - x):
-             answer.add(tuple((x, ) + y))
-     return answer
+# def generateTemplates(numParams):
+#     generated = []
+#     generateTemplatesR('START', numParams, numParams, generated)
+#     generated = [s for s in generated if s.count('TERM') == numParams]
+#     return generated
 
 
-def groupList(numList):
-    groupedWithLength = {n:[] for n in range(1, len(numList) + 1)}
-    numList = iterableToStrIterable(numList)
-    partitions = partitionInt(len(numList))
-    for permutation in itertools.permutations(numList):
-        for partition in partitions:
-            g = groupByPattern(permutation, partition)
-            groupedWithLength[len(g)].append(g)
-    return groupedWithLength 
+# def generateTemplatesR(builtString, uLimit, numParameters, generated):
+#     match = re.search(dictKeysRegex, builtString)
+#     if not match:
+#         return builtString
+#     language = genLanguage()
+#     if numParameters <= 0:
+#         language['PARAMETER'] = ['TERM']
+#         language['NUM'] = ['TERM']
+#     if uLimit <= 0:
+#         language['UNARY'] = []
+#     for replacement in language[match.group()]:
+#         result = None
+#         if match.group() == 'UNARY':
+#             result = generateTemplatesR(resub(match, replacement, builtString), uLimit - 1, numParameters, generated)
+#         elif match.group() == 'PARAMETER':
+#             result = generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
+#         elif match.group() == 'NUM' and builtString[match.start() - 4:match.start()] == 'TERM':
+#             result = generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
+#         else: 
+#             result = generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters, generated)
+#         if result:
+#             generated.append(result)
+#     return
+
+# # I took this function (slightly modified) from
+# # http://stackoverflow.com/questions/10035752/elegant-python-code-for-integer-partitioning 
+# def partitionInt(number):
+#      answer = set()
+#      answer.add((number, ))
+#      for x in range(1, number):
+#          for y in partitionInt(number - x):
+#              answer.add(tuple((x, ) + y))
+#      return answer
+
+
+# def groupList(numList):
+#     groupedWithLength = {n:[] for n in range(1, len(numList) + 1)}
+#     numList = iterableToStrIterable(numList)
+#     partitions = partitionInt(len(numList))
+#     for permutation in itertools.permutations(numList):
+#         for partition in partitions:
+#             g = groupByPattern(permutation, partition)
+#             groupedWithLength[len(g)].append(g)
+#     return groupedWithLength 
             
 
-def groupByPattern(numList, pattern):
-    grouped = []
-    for length in pattern:
-        grouped.append(''.join(numList[:length]))
-        numList = numList[length:]
-    return grouped
+# def groupByPattern(numList, pattern):
+#     grouped = []
+#     for length in pattern:
+#         grouped.append(''.join(numList[:length]))
+#         numList = numList[length:]
+#     return grouped
 
 
