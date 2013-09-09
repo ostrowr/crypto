@@ -37,7 +37,7 @@ class Crypto:
 
 
     def __generateTemplatesR(self, builtString, uLimit, numParameters, generated):
-        match = re.search(dictKeysRegex, builtString)
+        match = re.search(self.nonterminals, builtString)
         if not match:
             return builtString
         language = self.genLanguage()
@@ -49,13 +49,13 @@ class Crypto:
         for replacement in language[match.group()]:
             result = None
             if match.group() == 'UNARY':
-                result = self.__generateTemplatesR(resub(match, replacement, builtString), uLimit - 1, numParameters, generated)
+                result = self.__generateTemplatesR(self.resub(match, replacement, builtString), uLimit - 1, numParameters, generated)
             elif match.group() == 'PARAMETER':
-                result = self.__generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
+                result = self.__generateTemplatesR(self.resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
             elif match.group() == 'NUM' and builtString[match.start() - 4:match.start()] == 'TERM':
-                result = self.__generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
+                result = self.__generateTemplatesR(self.resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
             else: 
-                result = self.__generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters, generated)
+                result = self.__generateTemplatesR(self.resub(match, replacement, builtString), uLimit, numParameters, generated)
             if result:
                 generated.append(result)
         return
@@ -83,39 +83,80 @@ class Crypto:
         invalid = {}
         for equation in equations:
             impreciseFlag = False
+            errorFlag = False
             try:
                 result = eval(equation)
-                if result.denominator != 1:
-                    result = result.limit_denominator()
-                    impreciseFlag = True
             except ZeroDivisionError:
+                errorFlag = True
                 result = "Zero Division Error"
             except OverflowError:
+                errorFlag = True
                 result = "Overflow Error"
             except ValueError:
+                errorFlag = True
                 result = "Math Domain Error"
-            if impreciseFlag: #decompose
-                if solutions.get(result) is None:
-                    imprecise[result] = [equation]
-                else:
-                    imprecise[result].append(equation)
+            except exception as e:
+                errorFlag = True
+                result = e
+            if errorFlag:
+                appendIntoDict(invalid, result, equation)
+                continue
+            if result.denominator != 1:
+                newResult = result.limit_denominator()
+                if newResult != result:
+                    result = float(result)
+                    impreciseFlag = True
+            if impreciseFlag:
+                appendIntoDict(imprecise, result, equation)
             else:
-                if solutions.get(result) is None:
-                    solutions[result] = [equation]
-                else:
-                    solutions[result].append(equation)
-        self.int_solutions = solutions
-        self.imprecise_solutions = imprecise
+                appendIntoDict(solutions, result, equation)
+        self.precise_solutions = solutions
+        self.imprecise_solutions = imprecise #mostly not imprecise
         self.invalid_solutions = invalid
-        return self.solutions
+        return self.precise_solutions, self.imprecise_solutions
 
+    @staticmethod
+    def resub(match, replace, builtString):
+        return builtString[:match.start()] + replace + builtString[match.end():]
 
+    def prettyPrintWithKeyCondition(self, condition):
+        print "Precise Solutions:"
+        for sol in sorted(self.precise_solutions.keys()):
+            if condition(sol):
+                print "\t", sol, shortest(self.precise_solutions[sol]) #shortest isn't working!
+        print "\nImprecise Solutions:"
+        for sol in sorted(self.imprecise_solutions.keys()):
+            if condition(sol):
+                print "\t", sol, shortest(self.imprecise_solutions[sol])
+        print
+
+    @staticmethod
+    def isCloseToInt(n):
+        a = int(n + .1)
+        if abs(a - n) <= .00001:
+            return True
+        return False 
+
+#This isn't working!! fix.
 def appendIntoDict(dictionary, key, val):
-    if dictionary.get(val) == None:
+    if dictionary.get(key) is None:
         dictionary[key] = [val]
     else:
         dictionary[key].append(val)
 
+def shortest(iterator):
+    minL = iterator[0]
+    shortest = iterator[0]
+    for i in iterator:
+        length = len(i)
+        if length < minL:
+            minL = length
+            shortest = i
+    return i
+
+
+class Operator:
+    pass
 
 
 #does this change the solutions? FM: Test
