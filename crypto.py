@@ -6,10 +6,11 @@ from fractions import Fraction
 
 class Crypto:
     def __init__(self):
-        self.unary = [fsqrt]
-        self.binary = [fadd, fsub, fdiv, fmult]
+        self.unary = [Fsqrt]
+        self.binary = [Fadd, Fsub, Fdiv, Fmult]
         self.language = self.genLanguage()
         self.nonterminals = '|'.join(self.language.keys())
+        self.funcNames = '|'.join(listFunctionNames(self.unary + self.binary))
 
     def addFunction(self):
         pass
@@ -137,6 +138,35 @@ class Crypto:
             return True
         return False 
 
+
+
+    def solveCrypto1(self, numList, equations=None, templates=None):
+        if equations is None:
+            return self.solveCrypto1(numList, self.generateEquations(numList, templates), templates)
+
+        for equation in equations:
+            expression, solution, precision = evalExpression(equation)
+
+
+    def evalFromRight(self, expression):
+        readableExpression = expression
+        result = None
+        pattern = re.compile('(' + self.funcNames + ')\((\d+)(?:,(\d+)|\))')
+        match = pattern.search(expression)
+        operator = match.group(1)
+        arg1 = match.group(2)
+        arg2 = match.group(3)
+        if arg2 is None:
+            result = globals()[operator](Fraction(arg1))
+        else:
+            result = globals()[operator](Fraction(arg1), Fraction(arg2))
+        print result
+        #readableExpression = self.resub(match, "hello!", readableExpression)
+        #print readableExpression
+
+Fmult(4,Fsub(Fsqrt(Fmult(4, 4)),4))
+
+
 #This isn't working!! fix.
 def appendIntoDict(dictionary, key, val):
     if dictionary.get(key) is None:
@@ -157,6 +187,73 @@ def shortest(iterator):
 
 class Operator:
     pass
+
+
+
+
+class Fneg(Operator):
+    def __init__(self, a):
+        self.val = -a
+    def __str__(self):
+        return '(-' + str(a) + ')'
+    def __name__(self):
+        return 'Fneg'
+
+class Fsqrt(Operator):
+    def __init__(self, a):
+        self.val = Fraction(math.sqrt(n))
+    def __str__(self):
+        return '(sqrt(' + str(a) + '))'
+    def __name__(self):
+        return 'Fsqrt'
+
+class Ffact(Operator):
+    def __init__(self, a):
+        if n.denominator == 1:
+            self.val = math.factorial(n.numerator)
+        self.val = n
+    def __str__(self):
+        return '(' + str(a) + '!)'
+    def __name__(self):
+        return 'Ffact'
+
+
+
+class Fadd(Operator):
+    def __init__(self, a, b):
+        self.val = a + b
+    def __str__(self):
+        return '(' + str(a) + '+' + str(b) + ')'
+    def __name__(self):
+        return 'Fadd'
+
+
+class Fsub(Operator):
+    def __init__(self, a, b):
+        self.val = a - b
+    def __str__(self):
+        return '(' + str(a) + '-' + str(b) + ')'
+    def __name__(self):
+        return 'Fsub'
+
+
+class Fdiv(Operator):
+    def __init__(self, a, b):
+        self.val = Fraction(a) / Fraction(b)
+    def __str__(self):
+        return '(' + str(a) + '/' + str(b) + ')'
+    def __name__(self):
+        return 'Fdiv'
+
+
+class Fmult(Operator):
+    def __init__(self, a, b):
+        self.val = a * b
+    def __str__(self):
+        return '(' + str(a) + '*' + str(b) + ')'
+    def __name__(self):
+        return 'Fmult'
+
 
 
 #does this change the solutions? FM: Test
@@ -203,116 +300,5 @@ UNARY = []#fsqrt]#, ffact]#fneg, fsqrt]#fnull
 BINARY = [fadd, fsub, fdiv, fmult]#, fexp] # add a concat function instead
 #of looping through all partitions?
 
-# def genLanguage(fUnary = UNARY, fBinary = BINARY):
-#     return  {
-#     'START': ['UNARY', 'BINARY', 'NUM'],
-#     'UNARY': ['UFUNC(PARAMETER)'],
-#     'BINARY': ['BFUNC(PARAMETER,PARAMETER)'],
-#     'PARAMETER': ['UNARY', 'BINARY', 'NUM'],
-#     'UFUNC': listFunctionNames(fUnary),
-#     'BFUNC': listFunctionNames(fBinary),
-#     'NUM': ['TERM', 'TERMNUM'],
-#     #'TERMNUM': ['TERMNUM']
-#     # define num to concat here
-# }
-
-# dictKeysRegex = r'START|NUM|UNARY|BINARY|PARAMETER|UFUNC|BFUNC'
-
-# def generateEquations(numList):
-#     templates = generateTemplates(len(numList))
-#     groupedByNum = groupList(numList)
-#     return fillExpressions(templates, groupedByNum)
-
-# def fillExpressions(templates, groups):
-#     intSolutions = {}
-#     maybeIntSolutions = {}
-#     for template in templates:
-#         count = template.count('NUM')
-#         for group in groups[count]:
-#             realExpression = replaceWithRealNumbers(template, group)
-#             result = None
-#             try:
-#                 result = eval(realExpression)
-#             except ZeroDivisionError:
-#                 pass
-#             except ValueError:
-#                 pass
-#             except OverflowError:
-#                 pass
-#             if result and result.denominator == 1:
-#                 intSolutions[result.numerator] = realExpression
-#             elif result:
-#                 limited = result.limit_denominator()
-#                 if limited.denominator == 1:
-#                     maybeIntSolutions[limited.numerator] = realExpression
-#     return intSolutions, maybeIntSolutions
-
-# def replaceWithRealNumbers(template, grouping):
-#     for group in grouping:
-#         template = template.replace('NUM', 'Fraction(' + group + ')', 1)
-#     return template
-
-# def resub(match, replace, builtString):
-#     return builtString[:match.start()] + replace + builtString[match.end():]
-
-# def generateTemplates(numParams):
-#     generated = []
-#     generateTemplatesR('START', numParams, numParams, generated)
-#     generated = [s for s in generated if s.count('TERM') == numParams]
-#     return generated
-
-
-# def generateTemplatesR(builtString, uLimit, numParameters, generated):
-#     match = re.search(dictKeysRegex, builtString)
-#     if not match:
-#         return builtString
-#     language = genLanguage()
-#     if numParameters <= 0:
-#         language['PARAMETER'] = ['TERM']
-#         language['NUM'] = ['TERM']
-#     if uLimit <= 0:
-#         language['UNARY'] = []
-#     for replacement in language[match.group()]:
-#         result = None
-#         if match.group() == 'UNARY':
-#             result = generateTemplatesR(resub(match, replacement, builtString), uLimit - 1, numParameters, generated)
-#         elif match.group() == 'PARAMETER':
-#             result = generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
-#         elif match.group() == 'NUM' and builtString[match.start() - 4:match.start()] == 'TERM':
-#             result = generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
-#         else: 
-#             result = generateTemplatesR(resub(match, replacement, builtString), uLimit, numParameters, generated)
-#         if result:
-#             generated.append(result)
-#     return
-
-# # I took this function (slightly modified) from
-# # http://stackoverflow.com/questions/10035752/elegant-python-code-for-integer-partitioning 
-# def partitionInt(number):
-#      answer = set()
-#      answer.add((number, ))
-#      for x in range(1, number):
-#          for y in partitionInt(number - x):
-#              answer.add(tuple((x, ) + y))
-#      return answer
-
-
-# def groupList(numList):
-#     groupedWithLength = {n:[] for n in range(1, len(numList) + 1)}
-#     numList = iterableToStrIterable(numList)
-#     partitions = partitionInt(len(numList))
-#     for permutation in itertools.permutations(numList):
-#         for partition in partitions:
-#             g = groupByPattern(permutation, partition)
-#             groupedWithLength[len(g)].append(g)
-#     return groupedWithLength 
-            
-
-# def groupByPattern(numList, pattern):
-#     grouped = []
-#     for length in pattern:
-#         grouped.append(''.join(numList[:length]))
-#         numList = numList[length:]
-#     return grouped
 
 
