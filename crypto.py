@@ -25,8 +25,6 @@ class Crypto:
         'UFUNC': listFunctionNames(self.unary),
         'BFUNC': listFunctionNames(self.binary),
         'NUM': ['TERM', 'TERMNUM'],
-        #'TERMNUM': ['TERMNUM']
-        # define num to concat here
     }
 
     def generateTemplates(self, numParams):
@@ -145,29 +143,41 @@ class Crypto:
             return self.solveCrypto1(numList, self.generateEquations(numList, templates), templates)
 
         for equation in equations:
-            expression, solution, precision = evalExpression(equation)
+            expression, solution, precision = evalFromRight(equation)
 
 
     def evalFromRight(self, expression):
-        readableExpression = expression
-        result = None
-        pattern = re.compile('(' + self.funcNames + ')\((\d+)(?:,(\d+)|\))')
+        operator, paramList, start, end = self.getLastFunction(expression)
+        readable = expression
+        while operator:
+            result = globals()[operator](*paramList)
+            print expression[:start] + "   " + str(result) + "   " + expression[end - 1:]
+            expression = expression[:start] + str(result) + expression[end - 1:] #here
+            print expression
+            operator, paramList, start, end = self.getLastFunction(expression)
+        print expression
+
+
+    def getLastFunction(self, expression):
+        pattern = re.compile('(?:.*)(' + self.funcNames + ')')
         match = pattern.search(expression)
+        if not match:
+            return None, None, None, None
         operator = match.group(1)
-        arg1 = match.group(2)
-        arg2 = match.group(3)
-        if arg2 is None:
-            result = globals()[operator](Fraction(arg1))
-        else:
-            result = globals()[operator](Fraction(arg1), Fraction(arg2))
-        print result
-        #readableExpression = self.resub(match, "hello!", readableExpression)
-        #print readableExpression
+        start = match.start(1)
+        paramStart = match.end(1) + 1
+        numParens = 1
+        pos = paramStart + 1
+        while numParens:
+            if expression[pos] == ')':
+                numParens -= 1
+            elif expression[pos] == '(':
+                numParens += 1
+            pos += 1
+        return operator, expression[paramStart:pos - 1].split(','), start, pos
 
-Fmult(4,Fsub(Fsqrt(Fmult(4, 4)),4))
 
 
-#This isn't working!! fix.
 def appendIntoDict(dictionary, key, val):
     if dictionary.get(key) is None:
         dictionary[key] = [val]
@@ -188,102 +198,120 @@ def shortest(iterator):
 class Operator:
     pass
 
+#CODE COMPLETE
 
 
-
-class Fneg(Operator):
+class Fneg():
     def __init__(self, a):
-        self.val = -a
+        self.a = a
     def __str__(self):
-        return '(-' + str(a) + ')'
+        return '(-' + str(self.a) + ')'
     def __name__(self):
         return 'Fneg'
+    def getVal(self):
+        return -self.a
 
 class Fsqrt(Operator):
     def __init__(self, a):
-        self.val = Fraction(math.sqrt(n))
+        self.a = a
     def __str__(self):
-        return '(sqrt(' + str(a) + '))'
+        return 'sqrt(' + str(self.a) + ')'
     def __name__(self):
         return 'Fsqrt'
+    def getVal(self):
+        return Fraction(math.sqrt(self.a))
+
 
 class Ffact(Operator):
     def __init__(self, a):
-        if n.denominator == 1:
-            self.val = math.factorial(n.numerator)
-        self.val = n
+        self.a = a
     def __str__(self):
-        return '(' + str(a) + '!)'
+        return '(' + str(self.a) + '!)'
     def __name__(self):
         return 'Ffact'
-
+    def getVal(self):
+        if self.a.denominator == 1:
+            return math.factorial(a)
+        return a
 
 
 class Fadd(Operator):
     def __init__(self, a, b):
-        self.val = a + b
+        self.a = a
+        self.b = b
     def __str__(self):
-        return '(' + str(a) + '+' + str(b) + ')'
+        return '(' + str(self.a) + '+' + str(self.b) + ')'
     def __name__(self):
         return 'Fadd'
+    def getVal(self):
+        return self.a + self.b
 
 
 class Fsub(Operator):
     def __init__(self, a, b):
-        self.val = a - b
+        self.a = a
+        self.b = b
     def __str__(self):
-        return '(' + str(a) + '-' + str(b) + ')'
+        return '(' + str(self.a) + '-' + str(self.b) + ')'
     def __name__(self):
         return 'Fsub'
+    def getVal(self):
+        return self.a - self.b
 
 
 class Fdiv(Operator):
     def __init__(self, a, b):
-        self.val = Fraction(a) / Fraction(b)
+        self.a = a
+        self.b = b
     def __str__(self):
-        return '(' + str(a) + '/' + str(b) + ')'
+        return '(' + str(self.a) + '/' + str(self.b) + ')'
     def __name__(self):
         return 'Fdiv'
+    def getVal(self):
+        return Fraction(self.a) / Fraction(self.b)
 
 
 class Fmult(Operator):
     def __init__(self, a, b):
-        self.val = a * b
+        self.a = a
+        self.b = b
     def __str__(self):
-        return '(' + str(a) + '*' + str(b) + ')'
+        return '(' + str(self.a) + '*' + str(self.b) + ')'
     def __name__(self):
         return 'Fmult'
+    def getVal(self):
+        return self.a * self.b
 
 
 
-#does this change the solutions? FM: Test
-def fneg(n):
-    return -n
+# #does this change the solutions? FM: Test
+# def fneg(n):
+#     return -n
 
-def fexp(a, b):
-    return Fraction(a ** b)
+# def fexp(a, b):
+#     return Fraction(a ** b)
 
-def ffact(n):
-    if n.denominator == 1:
-        return math.factorial(n.numerator)
-    return n
+# def ffact(n):
+#     if n.denominator == 1:
+#         return math.factorial(n.numerator)
+#     return n
 
-##################################################
+# ##################################################
 
-def fsqrt(n):
-    return Fraction(math.sqrt(n))
+# def fsqrt(n):
+#     return Fraction(math.sqrt(n))
 
-def fadd(a, b):
-    return a + b
+# def fadd(a, b):
+#     return a + b
 
-def fsub(a, b):
-    return a - b
+# def fsub(a, b):
+#     return a - b
 
-def fdiv(a, b):
-    return Fraction(a) / Fraction(b)
+# def fdiv(a, b):
+#     return Fraction(a) / Fraction(b)
 
-def fmult(a, b):
-    return a * b
+# def fmult(a, b):
+#     return a * b
 
 
 ###################################################
@@ -295,10 +323,10 @@ def iterableToStrIterable(iterable):
     return [str(i) for i in iterable]
 
 #can I generate these programmatically?
-UNARY = []#fsqrt]#, ffact]#fneg, fsqrt]#fnull
+# UNARY = []#fsqrt]#, ffact]#fneg, fsqrt]#fnull
 
-BINARY = [fadd, fsub, fdiv, fmult]#, fexp] # add a concat function instead
-#of looping through all partitions?
+# BINARY = [fadd, fsub, fdiv, fmult]#, fexp] # add a concat function instead
+# #of looping through all partitions?
 
 
 
