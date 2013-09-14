@@ -3,6 +3,7 @@ import itertools
 import re
 import inspect
 from fractions import Fraction
+import unittest
 
 class Crypto:
     def __init__(self):
@@ -74,45 +75,45 @@ class Crypto:
         return self.equations
 
 
-    def solveCrypto(self, numList, equations=None, templates=None):
-        if equations is None:
-            return self.solveCrypto(numList, self.generateEquations(numList, templates), templates)
-        solutions = {}
-        imprecise = {}
-        invalid = {}
-        for equation in equations:
-            impreciseFlag = False
-            errorFlag = False
-            try:
-                result = eval(equation)
-            except ZeroDivisionError:
-                errorFlag = True
-                result = "Zero Division Error"
-            except OverflowError:
-                errorFlag = True
-                result = "Overflow Error"
-            except ValueError:
-                errorFlag = True
-                result = "Math Domain Error"
-            except exception as e:
-                errorFlag = True
-                result = e
-            if errorFlag:
-                appendIntoDict(invalid, result, equation)
-                continue
-            if result.denominator != 1:
-                newResult = result.limit_denominator()
-                if newResult != result:
-                    result = float(result)
-                    impreciseFlag = True
-            if impreciseFlag:
-                appendIntoDict(imprecise, result, equation)
-            else:
-                appendIntoDict(solutions, result, equation)
-        self.precise_solutions = solutions
-        self.imprecise_solutions = imprecise #mostly not imprecise
-        self.invalid_solutions = invalid
-        return self.precise_solutions, self.imprecise_solutions
+    # def solveCrypto(self, numList, equations=None, templates=None):
+    #     if equations is None:
+    #         return self.solveCrypto(numList, self.generateEquations(numList, templates), templates)
+    #     solutions = {}
+    #     imprecise = {}
+    #     invalid = {}
+    #     for equation in equations:
+    #         impreciseFlag = False
+    #         errorFlag = False
+    #         try:
+    #             result = eval(equation)
+    #         except ZeroDivisionError:
+    #             errorFlag = True
+    #             result = "Zero Division Error"
+    #         except OverflowError:
+    #             errorFlag = True
+    #             result = "Overflow Error"
+    #         except ValueError:
+    #             errorFlag = True
+    #             result = "Math Domain Error"
+    #         except exception as e:
+    #             errorFlag = True
+    #             result = e
+    #         if errorFlag:
+    #             appendIntoDict(invalid, result, equation)
+    #             continue
+    #         if result.denominator != 1:
+    #             newResult = result.limit_denominator()
+    #             if newResult != result:
+    #                 result = float(result)
+    #                 impreciseFlag = True
+    #         if impreciseFlag:
+    #             appendIntoDict(imprecise, result, equation)
+    #         else:
+    #             appendIntoDict(solutions, result, equation)
+    #     self.precise_solutions = solutions
+    #     self.imprecise_solutions = imprecise #mostly not imprecise
+    #     self.invalid_solutions = invalid
+    #     return self.precise_solutions, self.imprecise_solutions
 
     @staticmethod
     def resub(match, replace, builtString):
@@ -138,34 +139,63 @@ class Crypto:
 
 
 
-    def solveCrypto1(self, numList, equations=None, templates=None):
+    def solveCrypto(self, numList, equations=None, templates=None):
         if equations is None:
-            return self.solveCrypto1(numList, self.generateEquations(numList, templates), templates)
-
+            return self.solveCrypto(numList, self.generateEquations(numList, templates), templates)
+        solutions = {}
         for equation in equations:
-            expression, solution, precision = evalFromRight(equation)
+            expression = self.convertToReadable(equation)
+            try:
+                value = self.evalExpression(equation)
+            except Exception as e:
+                value = str(e)
+            curr = solutions.get(value)
+            if not curr or len(expression) < len(curr):
+                solutions[value] = expression
+            # only one solution per value, can be changed.
+        self.solutions = solutions
+        return solutions
+
+    @staticmethod
+    def stripParens(expression):
+        if expression[0] == '(' and expression[-1] == ')':
+            return expression[1:-1]
+        return expression
 
 
-    def evalFromRight(self, expression):
+    def printIntegralSolutions(self):
+        integral = {int(k): v for (k, v) in self.solutions.items() if not re.search('^[a-zF]|/', k)}
+        fractional = {Fraction(k): v for (k, v) in self.solutions.items() if re.search('/', k)}
+        for i in sorted(integral.keys()):
+            print i, self.stripParens(integral[i])
+
+
+    def convertToReadable(self, expression):
         operator, paramList, start, end = self.getLastFunction(expression)
-        readable = expression
         while operator:
             result = globals()[operator](*paramList)
-            print expression[:start] + "   " + str(result) + "   " + expression[end - 1:]
-            expression = expression[:start] + str(result) + expression[end - 1:] #here
-            print expression
+            expression = expression[:start] + str(result) + expression[end+1:] #here
             operator, paramList, start, end = self.getLastFunction(expression)
-        print expression
+        return expression
+
+
+    def evalExpression(self, expression):
+        operator, paramList, start, end = self.getLastFunction(expression)
+        while operator:
+            result = globals()[operator](*[Fraction(i) for i in paramList])
+            expression = expression[:start] + str(result.getVal()) + expression[end+1:]
+            operator, paramList, start, end = self.getLastFunction(expression)
+        return expression
 
 
     def getLastFunction(self, expression):
-        pattern = re.compile('(?:.*)(' + self.funcNames + ')')
+        pattern = re.compile('(?:.*)(' + self.funcNames + ')\(')
         match = pattern.search(expression)
         if not match:
             return None, None, None, None
         operator = match.group(1)
         start = match.start(1)
-        paramStart = match.end(1) + 1
+        paramStart = match.end(1)
         numParens = 1
         pos = paramStart + 1
         while numParens:
@@ -174,7 +204,7 @@ class Crypto:
             elif expression[pos] == '(':
                 numParens += 1
             pos += 1
-        return operator, expression[paramStart:pos - 1].split(','), start, pos
+        return operator, expression[paramStart+1:pos-1].split(','), start, pos - 1
 
 
 
@@ -330,3 +360,12 @@ def iterableToStrIterable(iterable):
 
 
 
+class TestCrypto(unittest.TestCase):
+    
+    def setUp(self):
+        self.c = crypto.Crypto()
+
+c = Crypto()
+c.solveCrypto([1, 2, 3, 4])
+c.printIntegralSolutions()
+        
