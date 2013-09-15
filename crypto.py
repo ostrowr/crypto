@@ -42,7 +42,7 @@ class Crypto:
         """
         Inits Crypto with default values.
         """
-        self.unary = [Fsqrt]
+        self.unary = []
         self.binary = [Fadd, Fsub, Fdiv, Fmult]
         self.language = self.genLanguage()
         self.nonterminals = '|'.join(self.language.keys())
@@ -238,7 +238,8 @@ class Crypto:
             try:
                 value = self.evalExpression(equation)
             except Exception as e:
-                value = str(e)
+                continue
+                #value = str(e)
             curr = solutions.get(value)
             if not curr or len(expression) < len(curr):
                 solutions[value] = expression
@@ -254,11 +255,20 @@ class Crypto:
         return expression
 
 
-    def printIntegralSolutions(self):
+    def printSolutions(self, noFilter):
         integral = {int(k): v for (k, v) in self.solutions.items() if not re.search('^[a-zF]|/', k)}
         fractional = {Fraction(k): v for (k, v) in self.solutions.items() if re.search('/', k)}
-        for i in sorted(integral.keys()):
-            print i, self.stripParens(integral[i])
+        if noFilter:
+            print "Integral Solutions:\n"
+            for i in sorted(integral.keys()):
+                print i, '=', self.stripParens(integral[i])
+            print '\nReal Solutions (possibly inexact)\n'
+            for i in sorted(fractional.keys()):
+                print float(i), '~', self.stripParens(fractional[i])
+        else:
+            for i in sorted(integral.keys()):
+                if i > 0:
+                    print i, '=', self.stripParens(integral[i])
 
 
     def convertToReadable(self, expression):
@@ -354,6 +364,17 @@ class Ffact(Operator):
             return math.factorial(a)
         return a
 
+class Fexp(Operator):
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+    def __str__(self):
+        return '(' + str(self.a) + '^' + str(self.b) + '!)'
+    def __name__(self):
+        return 'Fexp'
+    def getVal(self):
+        return self.a ** self.b
+
 
 class Fadd(Operator):
     def __init__(self, a, b):
@@ -402,6 +423,17 @@ class Fmult(Operator):
     def getVal(self):
         return self.a * self.b
 
+class FintDiv(Operator):
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+    def __str__(self):
+        return '(' + str(self.a) + '//' + str(self.b) + ')'
+    def __name__(self):
+        return 'FintDiv'
+    def getVal(self):
+        return int(self.a) // int(self.b)
+
 
 
 # #does this change the solutions? FM: Test
@@ -445,18 +477,104 @@ def iterableToStrIterable(iterable):
     return [str(i) for i in iterable]
 
 
+
+def getArgs():
+    parser = argparse.ArgumentParser()
+    # parser.add_argument('integers', metavar='N', type=int, nargs='+',
+    #                     help='integers with which to play Crypto')
+    #parser.add_argument('goal', metavar='N', type=int, help='')
+    parser.add_argument('solve', nargs='*', 
+                        metavar='N', type=int,
+                        default=[],
+                        help='Numbers to evaluate. (Default: solve Crypto for the last number given the first numbers.)')
+    parser.add_argument('-l', '--list', action='store_true',
+                        help='list all integral solutions for the given args.')
+    parser.add_argument('-i', '--interactive', action='store_true', 
+                        help='enter interactive mode.')
+    parser.add_argument('-a', '--all', action='store_true',
+                        help='allow fractional and negative solutions.')
+    args = parser.parse_args()
+    return args
+
+def interact():
+    c = Crypto()
+    functions = {'1': Fadd, '2': Fsub, '3': Fmult, '4': Fdiv, 
+                 '5': FintDiv, '6': Fsqrt, '7': Fexp, '8': Ffact,
+                 '9': Fneg}
+    unary = {Fsqrt, Ffact, Fneg}
+    binary = {Fadd, Fsub, Fmult, Fdiv, FintDiv, Fexp}
+    print "First, we'll decide which functions are legal."
+    print "1: Addition"
+    print "2: Subtraction"
+    print "3: Multiplication"
+    print "4: Division"
+    print "5: Integer Division"
+    print "6: Square Root"
+    print "7: Exponentiation"
+    print "8: Factorial"
+    print "9: Unary negation"
+    funcs = None
+    while not funcs:
+        funcs = raw_input("Enter the numbers of the desired functions, seperated by spaces: ")
+        try:
+            funcs = set([functions[func] for func in funcs.split(' ')])
+        except KeyError:
+            print "Make sure you only enter numbers in the range [1, 8]"
+            funcs = None
+    c.unary = unary & funcs
+    c.binary = binary & funcs
+    if c.unary:
+        print "Since you've selected a unary function, please enter a limit for its use."
+        print "  (Otherwise, it could be applied indefinitely)"
+        limit = None
+        while limit is None:
+            limit = raw_input('Recommended value for reasonable runtime: < 4: ')
+            if not limit.isdigit():
+                limit = None
+                print "Please enter a digit."
+        c.ulimit = int(limit)
+    print "\nTo speed up computation, we need to generate templates.\n"
+    numParams = None
+    while numParams is None:
+        numParams = raw_input('How many numbers would you like to play with? ')
+        if not numParams.isdigit():
+            numParams = None
+            print "Please enter a digit."
+    print '\nTemplates being generated for', numParams, 'numbers...'
+    c.generateTemplates(int(numParams))
+    print 'Template generation finished.'
+    print c.templates
+
+
+def listSolutions(numList, noFilter):
+    c = Crypto()
+    c.solveCrypto(numList)
+    c.printSolutions(noFilter)
+
+def solve(numList, goal):
+    c = Crypto()
+    c.solveCrypto(numList)
+    if c.solutions.get(str(goal)):
+        print c.solutions[str(goal)], '=', goal
+    else:
+        print 'I can\'t find a solution to produce', goal, 'using', numList
+
+
 def main():
-    #USE ARGPARSE!
-    # pCount = raw_input('\nThis program gives all integral solutions to Crypto.\n\n Enter the number of parameters: ')
-    # c = Crypto()
-    # templates = c.generateTemplates(int(pCount))
-    # params = raw_input('\n Enter ' + pCount + ' numbers to solve Crypto, or press [enter] to quit. ')
-    # params = params.split(' ')
-    # if not params:
-    #     return
-    # print params
-    # solutions = c.solveCrypto(sys.argv[1:])
-    # c.printIntegralSolutions()
+    args = getArgs()
+    if args.interactive:
+        print 'Entering interactive mode...'
+        if args.solve or args.list or args.all:
+            print 'Ignoring other arguments...'
+        interact()
+        return
+    if len(args.solve) < 3:
+        print "Too few arguments. Please enter at least 3."
+        return
+    if args.list:
+        listSolutions(args.solve, args.all)
+        return
+    solve(args.solve[:-1], args.solve[-1])
 
 
 if __name__ == '__main__':
