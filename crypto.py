@@ -1,23 +1,68 @@
 import math
 import itertools
 import re
-import inspect
-from fractions import Fraction
+#import inspect
 import unittest
+import sys
+import argparse
+from fractions import Fraction
+
 
 class Crypto:
+    """Solves 'Crypto' for arbitrary functions.
+
+    Traditionally, 'Crypto' a game with the goal:
+    "given five numbers, create an expression with
+    the first 4 numbers and the arithmetic operators
+    such that its evaluation is equal to the fifth number." 
+    This class extends that concept and allows crypto 
+    to be extended to n numbers and arbitrary functions.
+
+    Attributes:
+        unary: a list of functions that take one value.
+        binary: a list of functions that take two values.
+        language: a CFG that defines function composition
+        nonterminals: a string with all of the nonterminals in 
+            the language, seperated by `|`
+        funcNames: a string with all of the function names
+            available, seperated by `|`
+        ulimit: the number of unary functions allowed in an expression
+        templates: a list of expression templates with placeholder
+            values in place of real numbers.
+            e.g. `Fmult(Fsum(TERM, TERM), TERM)
+        equations: a list of expressions in function format.
+            e.g. `Fmult(Fsum(32, 6), 9)
+        solutions: a dictionary containing the shortest expression
+            that give each result.
+            e.g. {'1': '(3-2)/1', '2': '3-2+1'...}
+    """
+
+
     def __init__(self):
+        """
+        Inits Crypto with default values.
+        """
         self.unary = [Fsqrt]
         self.binary = [Fadd, Fsub, Fdiv, Fmult]
         self.language = self.genLanguage()
         self.nonterminals = '|'.join(self.language.keys())
         self.funcNames = '|'.join(listFunctionNames(self.unary + self.binary))
+        self.ulimit = 4
+        self.templates = None
+        self.equations = None
+        self.solutions = None
 
     def addFunction(self):
         pass
         # inspect.getargspec(<function>).args
 
+
     def genLanguage(self):
+        """
+        Returns the language that generates all 
+        possible function compositions of self.unary
+        and self.binary.
+        """
         return  {
         'START': ['UNARY', 'BINARY', 'NUM'],
         'UNARY': ['UFUNC(PARAMETER)'],
@@ -28,15 +73,38 @@ class Crypto:
         'NUM': ['TERM', 'TERMNUM'],
     }
 
+
     def generateTemplates(self, numParams):
+        """
+        Generates all templates for expressions.
+
+        Args:
+            numParams: The number of terminals (numbers)
+                that are allowed in each template.
+
+        Returns:
+            A list containing all legal templates.
+        """
         generated = []
-        self.__generateTemplatesR('START', numParams, numParams, generated)
+        self.__generateTemplatesR('START', self.ulimit, numParams, generated)
         generated = [s for s in generated if s.count('TERM') == numParams]
         self.templates = generated
         return self.templates
 
 
     def __generateTemplatesR(self, builtString, uLimit, numParameters, generated):
+        """
+        Recursive function to generate templates.
+
+        Args:
+            builtString: Template string that is recursively built.
+            uLimit: Maximum number of unary functions allowed in the template.
+            numParameters: The number of parameters for the template.
+            generated: A list of templates that this function populates.
+        
+        Returns:
+            None
+        """
         match = re.search(self.nonterminals, builtString)
         if not match:
             return builtString
@@ -49,24 +117,64 @@ class Crypto:
         for replacement in language[match.group()]:
             result = None
             if match.group() == 'UNARY':
-                result = self.__generateTemplatesR(self.resub(match, replacement, builtString), uLimit - 1, numParameters, generated)
+                result = self.__generateTemplatesR(
+                        self.resub(match, replacement, builtString), 
+                        uLimit - 1, 
+                        numParameters, 
+                        generated
+                        )
             elif match.group() == 'PARAMETER':
-                result = self.__generateTemplatesR(self.resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
-            elif match.group() == 'NUM' and builtString[match.start() - 4:match.start()] == 'TERM':
-                result = self.__generateTemplatesR(self.resub(match, replacement, builtString), uLimit, numParameters - 1, generated)
+                result = self.__generateTemplatesR(
+                        self.resub(match, replacement, builtString), 
+                        uLimit, 
+                        numParameters - 1, 
+                        generated
+                        )
+            elif match.group() == 'NUM' \
+                    and builtString[match.start() - 4:match.start()] == 'TERM':
+                result = self.__generateTemplatesR(
+                        self.resub(match, replacement, builtString), 
+                        uLimit, 
+                        numParameters - 1, 
+                        generated
+                        )
             else: 
-                result = self.__generateTemplatesR(self.resub(match, replacement, builtString), uLimit, numParameters, generated)
+                result = self.__generateTemplatesR(
+                        self.resub(match, replacement, builtString), 
+                        uLimit, 
+                        numParameters, 
+                        generated
+                        )
             if result:
                 generated.append(result)
         return
 
 
     def generateEquations(self, numList, templates=None):
+        """
+        Generates a list of legal expressions.
+
+        Args:
+            numList: A list of numbers (string or numeric)
+                with which expressions can be generated.
+            templates: A list of templates to be filled with
+                the numbers in numList. If None, is automatically
+                filled.
+
+        Returns:
+            A list of expressions that contain all of the numbers
+            in numList.
+        """
         equations = []
         if templates is None:
-            return self.generateEquations(numList, self.generateTemplates(len(numList)))
+            return self.generateEquations(
+                    numList, 
+                    self.generateTemplates(len(numList))
+                    )
         for template in templates:
-            for permutation in itertools.permutations(iterableToStrIterable(numList)):
+            for permutation in itertools.permutations(
+                        iterableToStrIterable(numList)
+                        ):
                 equation = template
                 for num in permutation:
                     equation = equation.replace('TERM', num, 1)
@@ -75,73 +183,55 @@ class Crypto:
         return self.equations
 
 
-    # def solveCrypto(self, numList, equations=None, templates=None):
-    #     if equations is None:
-    #         return self.solveCrypto(numList, self.generateEquations(numList, templates), templates)
-    #     solutions = {}
-    #     imprecise = {}
-    #     invalid = {}
-    #     for equation in equations:
-    #         impreciseFlag = False
-    #         errorFlag = False
-    #         try:
-    #             result = eval(equation)
-    #         except ZeroDivisionError:
-    #             errorFlag = True
-    #             result = "Zero Division Error"
-    #         except OverflowError:
-    #             errorFlag = True
-    #             result = "Overflow Error"
-    #         except ValueError:
-    #             errorFlag = True
-    #             result = "Math Domain Error"
-    #         except exception as e:
-    #             errorFlag = True
-    #             result = e
-    #         if errorFlag:
-    #             appendIntoDict(invalid, result, equation)
-    #             continue
-    #         if result.denominator != 1:
-    #             newResult = result.limit_denominator()
-    #             if newResult != result:
-    #                 result = float(result)
-    #                 impreciseFlag = True
-    #         if impreciseFlag:
-    #             appendIntoDict(imprecise, result, equation)
-    #         else:
-    #             appendIntoDict(solutions, result, equation)
-    #     self.precise_solutions = solutions
-    #     self.imprecise_solutions = imprecise #mostly not imprecise
-    #     self.invalid_solutions = invalid
-    #     return self.precise_solutions, self.imprecise_solutions
-
     @staticmethod
     def resub(match, replace, builtString):
+        """ 
+        given an re.matchObject, replaces the match in builtString with
+        replace. Assumes that the match object comes from builtString.
+        """ 
         return builtString[:match.start()] + replace + builtString[match.end():]
 
-    def prettyPrintWithKeyCondition(self, condition):
-        print "Precise Solutions:"
-        for sol in sorted(self.precise_solutions.keys()):
-            if condition(sol):
-                print "\t", sol, shortest(self.precise_solutions[sol]) #shortest isn't working!
-        print "\nImprecise Solutions:"
-        for sol in sorted(self.imprecise_solutions.keys()):
-            if condition(sol):
-                print "\t", sol, shortest(self.imprecise_solutions[sol])
-        print
 
-    @staticmethod
-    def isCloseToInt(n):
-        a = int(n + .1)
-        if abs(a - n) <= .00001:
-            return True
-        return False 
+    # def prettyPrintWithKeyCondition(self, condition):
+    #     print "Precise Solutions:"
+    #     for sol in sorted(self.precise_solutions.keys()):
+    #         if condition(sol):
+    #             print "\t", sol, shortest(self.precise_solutions[sol]) #shortest isn't working!
+    #     print "\nImprecise Solutions:"
+    #     for sol in sorted(self.imprecise_solutions.keys()):
+    #         if condition(sol):
+    #             print "\t", sol, shortest(self.imprecise_solutions[sol])
+    #     print
+
+    # @staticmethod
+    # def isCloseToInt(n):
+    #     a = int(n + .1)
+    #     if abs(a - n) <= .00001:
+    #         return True
+    #     return False 
 
 
 
     def solveCrypto(self, numList, equations=None, templates=None):
+        """
+        Finds all solutions to Crypto!
+
+        Args:
+            numList: List of numbers (string or numeric) to solve for.
+            equations: a list of equations generated by numList.
+                if None, automatically generated.
+            templates: templates for len(numList) params.
+                if None, automatically generated.
+
+        Returns:
+            a dict containing the shortest expression for each solution.
+        """
         if equations is None:
-            return self.solveCrypto(numList, self.generateEquations(numList, templates), templates)
+            return self.solveCrypto(
+                    numList, 
+                    self.generateEquations(numList, templates), 
+                    templates
+                    )
         solutions = {}
         for equation in equations:
             expression = self.convertToReadable(equation)
@@ -152,9 +242,10 @@ class Crypto:
             curr = solutions.get(value)
             if not curr or len(expression) < len(curr):
                 solutions[value] = expression
-            # only one solution per value, can be changed.
+                # only one solution per value
         self.solutions = solutions
         return solutions
+
 
     @staticmethod
     def stripParens(expression):
@@ -208,30 +299,28 @@ class Crypto:
 
 
 
-def appendIntoDict(dictionary, key, val):
-    if dictionary.get(key) is None:
-        dictionary[key] = [val]
-    else:
-        dictionary[key].append(val)
+# def appendIntoDict(dictionary, key, val):
+#     if dictionary.get(key) is None:
+#         dictionary[key] = [val]
+#     else:
+#         dictionary[key].append(val)
 
-def shortest(iterator):
-    minL = iterator[0]
-    shortest = iterator[0]
-    for i in iterator:
-        length = len(i)
-        if length < minL:
-            minL = length
-            shortest = i
-    return i
+# def shortest(iterator):
+#     minL = iterator[0]
+#     shortest = iterator[0]
+#     for i in iterator:
+#         length = len(i)
+#         if length < minL:
+#             minL = length
+#             shortest = i
+#     return i
 
 
 class Operator:
     pass
 
-#CODE COMPLETE
 
-
-class Fneg():
+class Fneg(Operator):
     def __init__(self, a):
         self.a = a
     def __str__(self):
@@ -240,6 +329,7 @@ class Fneg():
         return 'Fneg'
     def getVal(self):
         return -self.a
+
 
 class Fsqrt(Operator):
     def __init__(self, a):
@@ -346,26 +436,28 @@ class Fmult(Operator):
 
 ###################################################
 
+
 def listFunctionNames(listOfFunctions):
     return [f.__name__ for f in listOfFunctions]
     
+
 def iterableToStrIterable(iterable):
     return [str(i) for i in iterable]
 
-#can I generate these programmatically?
-# UNARY = []#fsqrt]#, ffact]#fneg, fsqrt]#fnull
 
-# BINARY = [fadd, fsub, fdiv, fmult]#, fexp] # add a concat function instead
-# #of looping through all partitions?
+def main():
+    #USE ARGPARSE!
+    # pCount = raw_input('\nThis program gives all integral solutions to Crypto.\n\n Enter the number of parameters: ')
+    # c = Crypto()
+    # templates = c.generateTemplates(int(pCount))
+    # params = raw_input('\n Enter ' + pCount + ' numbers to solve Crypto, or press [enter] to quit. ')
+    # params = params.split(' ')
+    # if not params:
+    #     return
+    # print params
+    # solutions = c.solveCrypto(sys.argv[1:])
+    # c.printIntegralSolutions()
 
 
-
-class TestCrypto(unittest.TestCase):
-    
-    def setUp(self):
-        self.c = crypto.Crypto()
-
-c = Crypto()
-c.solveCrypto([1, 2, 3, 4])
-c.printIntegralSolutions()
-        
+if __name__ == '__main__':
+    main()
