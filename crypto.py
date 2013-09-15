@@ -6,6 +6,7 @@ import unittest
 import sys
 import argparse
 from fractions import Fraction
+from numbers import Rational
 
 
 class Crypto:
@@ -497,6 +498,7 @@ def getArgs():
     return args
 
 def interact():
+    """NOT DONE"""
     c = Crypto()
     functions = {'1': Fadd, '2': Fsub, '3': Fmult, '4': Fdiv, 
                  '5': FintDiv, '6': Fsqrt, '7': Fexp, '8': Ffact,
@@ -543,7 +545,21 @@ def interact():
     print '\nTemplates being generated for', numParams, 'numbers...'
     c.generateTemplates(int(numParams))
     print 'Template generation finished.'
-    print c.templates
+    params = None
+    while params is None:
+        params = raw_input('Type ' + numParams + ' natural numbers, seperated by spaces, to solve Crypto: ')
+        params = params.split(' ')
+        for i in params:
+            if not i.isdigit():
+                print "Make sure you type only digits and spaces."
+                params = None
+    params = [int(param) for param in params]
+    print "Solving Crypto for", params
+    c.solveCrypto(params)
+    print "Finished solving."
+    c.printSolutions(False)
+
+
 
 
 def listSolutions(numList, noFilter):
